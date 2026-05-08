@@ -1,13 +1,22 @@
 const nodemailer = require('nodemailer');
 
-// Create reusable transporter
+// Send via Resend HTTP API (works on Render free tier – no SMTP ports needed)
+async function sendViaResend(to, from, subject, html, replyTo) {
+  const { Resend } = require('resend');
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  const payload = { from, to, subject, html };
+  if (replyTo) payload.replyTo = replyTo;
+  const { error } = await resend.emails.send(payload);
+  if (error) throw new Error(error.message);
+}
+
+// Send via SMTP (for local development)
 const createTransporter = () => {
-  // For production, use SMTP credentials from env
-  // For development, set SMTP_HOST=smtp.ethereal.email (nodemailer test account)
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.SMTP_PORT || '587'),
     secure: process.env.SMTP_SECURE === 'true',
+    family: 4,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -15,14 +24,25 @@ const createTransporter = () => {
   });
 };
 
+// Unified send – uses Resend in production, SMTP locally
+async function sendEmail({ from, to, subject, html, replyTo }) {
+  if (process.env.RESEND_API_KEY) {
+    await sendViaResend(to, from, subject, html, replyTo);
+  } else {
+    const transporter = createTransporter();
+    const payload = { from, to, subject, html };
+    if (replyTo) payload.replyTo = replyTo;
+    await transporter.sendMail(payload);
+  }
+}
+
 /**
  * Send password reset email
  */
 async function sendPasswordResetEmail(email, name, resetUrl) {
-  const transporter = createTransporter();
-
-  await transporter.sendMail({
-    from: `"Restaurant Manager" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+  const from = `Restaurant Manager <${process.env.SMTP_USER}>`;
+  await sendEmail({
+    from,
     to: email,
     subject: 'Reset your password – Restaurant Manager',
     html: `
@@ -46,10 +66,9 @@ async function sendPasswordResetEmail(email, name, resetUrl) {
  * Send subscription confirmation email
  */
 async function sendSubscriptionEmail(email, name, plan, expiresAt) {
-  const transporter = createTransporter();
-
-  await transporter.sendMail({
-    from: `"Restaurant Manager" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+  const from = `Restaurant Manager <${process.env.SMTP_USER}>`;
+  await sendEmail({
+    from,
     to: email,
     subject: `Subscription Activated – ${plan.toUpperCase()} Plan`,
     html: `
@@ -68,14 +87,11 @@ async function sendSubscriptionEmail(email, name, plan, expiresAt) {
  * Forward a customer contact form message to the restaurant owner
  */
 async function sendContactEmail(ownerEmail, restaurantName, { name, email, subject, message }) {
-  const transporter = createTransporter();
-
-  // Normalise SMTP_FROM – accept both "Name <email>" and plain "email" formats
   const rawFrom = process.env.SMTP_FROM || process.env.SMTP_USER || '';
-  const fromAddress = rawFrom.includes('<') ? rawFrom : `"${restaurantName} Website" <${rawFrom}>`;
+  const from = rawFrom.includes('<') ? rawFrom : `${restaurantName} Website <${rawFrom}>`;
 
-  await transporter.sendMail({
-    from: fromAddress,
+  await sendEmail({
+    from,
     to: ownerEmail,
     replyTo: email,
     subject: `[Contact Form] ${subject || 'New message'} – from ${name}`,

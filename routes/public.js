@@ -14,6 +14,7 @@ const MenuItem = require('../models/MenuItem');
 const CustomerOrder = require('../models/CustomerOrder');
 const SiteContent = require('../models/SiteContent');
 const User = require('../models/User');
+const ContactMessage = require('../models/ContactMessage');
 const { emitToOwner } = require('../services/socket');
 
 // Helper: resolve restaurant owner from ?restaurant=ownerId query param
@@ -202,6 +203,9 @@ router.post('/contact', async (req, res) => {
     // Find restaurant owner email to notify them
     const owner = await User.findById(ownerId).select('email restaurantName');
 
+    // Save to database
+    await ContactMessage.create({ owner: ownerId, name, email, subject, message });
+
     // Optionally send email notification to restaurant owner
     try {
       const { sendContactEmail } = require('../services/email');
@@ -226,8 +230,20 @@ router.post('/contact', async (req, res) => {
 // GET /api/public/test-email – test SMTP config (remove after testing)
 router.get('/test-email', async (req, res) => {
   try {
+    const hasResendKey = !!process.env.RESEND_API_KEY;
+    const smtpUser = process.env.SMTP_USER || 'not set';
+    console.log('RESEND_API_KEY present:', hasResendKey);
+    console.log('SMTP_USER:', smtpUser);
+
+    if (!hasResendKey) {
+      return res.status(500).json({
+        message: '❌ RESEND_API_KEY is not set in environment',
+        SMTP_USER: smtpUser,
+      });
+    }
+
     const { sendContactEmail } = require('../services/email');
-    const testTo = process.env.SMTP_USER;
+    const testTo = 'karanchy95@gmail.com';
     await sendContactEmail(testTo, 'Test Restaurant', {
       name: 'Test User',
       email: testTo,

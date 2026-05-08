@@ -226,4 +226,30 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// GET /api/dashboard/messages – contact form submissions
+const ContactMessage = require('../models/ContactMessage');
+router.get('/messages', auth, async (req, res) => {
+  try {
+    const messages = await ContactMessage.find({ owner: req.ownerId })
+      .sort({ createdAt: -1 })
+      .limit(100);
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// PATCH /api/dashboard/messages/:id/read – mark as read
+router.patch('/messages/:id/read', auth, async (req, res) => {
+  try {
+    await ContactMessage.findOneAndUpdate(
+      { _id: req.params.id, owner: req.ownerId },
+      { isRead: true }
+    );
+    res.json({ message: 'Marked as read' });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;
