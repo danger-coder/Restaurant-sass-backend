@@ -70,8 +70,12 @@ async function sendSubscriptionEmail(email, name, plan, expiresAt) {
 async function sendContactEmail(ownerEmail, restaurantName, { name, email, subject, message }) {
   const transporter = createTransporter();
 
+  // Normalise SMTP_FROM – accept both "Name <email>" and plain "email" formats
+  const rawFrom = process.env.SMTP_FROM || process.env.SMTP_USER || '';
+  const fromAddress = rawFrom.includes('<') ? rawFrom : `"${restaurantName} Website" <${rawFrom}>`;
+
   await transporter.sendMail({
-    from: `"${restaurantName} Website" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+    from: fromAddress,
     to: ownerEmail,
     replyTo: email,
     subject: `[Contact Form] ${subject || 'New message'} – from ${name}`,

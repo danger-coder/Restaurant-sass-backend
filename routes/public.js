@@ -207,8 +207,12 @@ router.post('/contact', async (req, res) => {
       const { sendContactEmail } = require('../services/email');
       if (owner?.email && sendContactEmail) {
         await sendContactEmail(owner.email, owner.restaurantName, { name, email, subject, message });
+        console.log(`✅ Contact email sent to ${owner.email}`);
+      } else {
+        console.warn('⚠️ Contact email skipped – owner email not found:', owner?.email);
       }
-    } catch (_) {
+    } catch (emailErr) {
+      console.error('❌ Contact email failed:', emailErr.message);
       // Email is best-effort; don't fail the request
     }
 
@@ -216,6 +220,23 @@ router.post('/contact', async (req, res) => {
   } catch (err) {
     console.error('Contact form error:', err);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// GET /api/public/test-email – test SMTP config (remove after testing)
+router.get('/test-email', async (req, res) => {
+  try {
+    const { sendContactEmail } = require('../services/email');
+    const testTo = process.env.SMTP_USER;
+    await sendContactEmail(testTo, 'Test Restaurant', {
+      name: 'Test User',
+      email: testTo,
+      subject: 'SMTP Test',
+      message: 'If you receive this, email is working correctly!',
+    });
+    res.json({ message: `✅ Test email sent to ${testTo}` });
+  } catch (err) {
+    res.status(500).json({ message: '❌ Email failed', error: err.message });
   }
 });
 
